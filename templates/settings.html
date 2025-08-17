@@ -97,11 +97,11 @@
                     </div>
 
                     <div class="setting-item">
-                        <label>Change Avatar (Cost: 50 ⭐):</label>
-                        {# <button id="changeAvatarBtn" disabled>Choose Avatar</button> -- Replaced by avatar grid #}
-                        <div id="avatarSelectionContainer" style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; padding:10px; border: 1px solid #eee; border-radius:5px;">
-                            <!-- Avatars will be populated here by JavaScript -->
-                        </div>
+                        <label>Change Profile Picture:</label>
+                        <form id="upload-avatar-form" method="POST" enctype="multipart/form-data">
+                            <input type="file" id="avatar-upload-input" name="avatar" accept="image/png, image/jpeg">
+                            <button type="submit" id="upload-avatar-btn" disabled>Upload</button>
+                        </form>
                     </div>
 
                     <div class="setting-item">
@@ -275,45 +275,6 @@
             return;
         }
 
-        const PREDEFINED_AVATARS = [
-            "{{ url_for('static', filename='images/avatars/default_avatar.png') }}", // Default
-            "https://placekitten.com/50/50", "https://placekitten.com/51/51", "https://placekitten.com/52/52",
-            "https://placekitten.com/53/53", "https://placekitten.com/54/54", "https://placekitten.com/55/55",
-            "https://picsum.photos/id/237/50/50", "https://picsum.photos/id/238/50/50", "https://picsum.photos/id/239/50/50",
-            "https://picsum.photos/id/240/50/50", "https://picsum.photos/id/241/50/50", "https://picsum.photos/id/242/50/50",
-            "https://picsum.photos/id/1005/50/50", // Example with specific ID
-            "https://picsum.photos/seed/cat/50/50", // Example with seed
-            "https://picsum.photos/seed/dog/50/50"
-        ];
-
-        function populateAvatarSelection() {
-            avatarSelectionContainer.innerHTML = ''; // Clear previous avatars
-            PREDEFINED_AVATARS.forEach(avatarUrl => {
-                const img = document.createElement('img');
-                img.src = avatarUrl;
-                img.alt = "Avatar Option";
-                img.style.width = '50px';
-                img.style.height = '50px';
-                img.style.borderRadius = '50%';
-                img.style.border = '2px solid transparent';
-                img.style.cursor = 'pointer';
-                img.addEventListener('click', function() {
-                    // Visually indicate selection (optional)
-                    // document.querySelectorAll('#avatarSelectionContainer img').forEach(i => i.style.border = '2px solid transparent');
-                    // img.style.border = '2px solid #007bff'; // Highlight selected
-
-                    // Directly process purchase on click for simplicity
-                    if (currentSelectedUserForSettings) {
-                         processPurchase('avatar', avatarUrl);
-                    } else {
-                        showSettingsPopup("Please select a user first.", "error");
-                    }
-                });
-                avatarSelectionContainer.appendChild(img);
-            });
-        }
-
-
         // Populate user select dropdown
         flask_users_list.forEach(username => {
             const option = document.createElement('option');
@@ -324,20 +285,24 @@
 
         function updateProfileDetailsDisplay(username) {
             currentSelectedUserForSettings = username;
-            if (username) {
-                const userDataFromServer = flask_all_user_details[username]; // Original data from server (for stars)
-                const userDisplayName = localStorage.getItem(`user_${username}_displayName`) || username;
-                const userAvatar = localStorage.getItem(`user_${username}_avatarUrl`) || "{{ url_for('static', filename='images/avatars/default_avatar.png') }}";
-                const userAccentColor = localStorage.getItem(`user_${username}_accentColor`) || 'grey';
-                // Fetch latest star count directly from server data or update it if purchases happen
-                // For now, flask_all_user_details is initial. We need to update this if stars change.
-                // Let's add a function to update stars locally for the display.
-                const currentStars = userDataFromServer ? userDataFromServer.stars : ( (flask_all_user_details[username] && flask_all_user_details[username].stars) ? flask_all_user_details[username].stars : 0);
+            const uploadForm = document.getElementById('upload-avatar-form');
+            const uploadBtn = document.getElementById('upload-avatar-btn');
 
+            if (username) {
+                const userDataFromServer = flask_all_user_details[username];
+                const userDisplayName = localStorage.getItem(`user_${username}_displayName`) || username;
+
+                let profilePictureUrl = "{{ url_for('static', filename='images/avatars/default_avatar.png') }}";
+                if (userDataFromServer && userDataFromServer.profile_picture) {
+                    profilePictureUrl = "{{ url_for('static', filename='') }}" + userDataFromServer.profile_picture;
+                }
+
+                const userAccentColor = localStorage.getItem(`user_${username}_accentColor`) || 'grey';
+                const currentStars = userDataFromServer ? userDataFromServer.stars : 0;
 
                 document.getElementById('selectedUserNameHeader').textContent = userDisplayName;
                 document.getElementById('currentDisplayName').textContent = userDisplayName;
-                document.getElementById('currentAvatar').src = userAvatar;
+                document.getElementById('currentAvatar').src = profilePictureUrl;
                 document.getElementById('currentAccentColorDisplay').style.backgroundColor = userAccentColor;
                 document.getElementById('currentUserStars').textContent = currentStars;
 
@@ -345,8 +310,8 @@
                 newDisplayNameInput.disabled = false;
                 saveDisplayNameBtn.disabled = false;
 
-                // changeAvatarBtn.disabled = false; // Button removed, grid is always active
-                avatarSelectionContainer.style.display = 'flex'; // Ensure grid is visible
+                uploadForm.action = `/settings/upload_profile_pic/${username}`;
+                uploadBtn.disabled = false;
 
                 newAccentColorInput.value = userAccentColor;
                 newAccentColorInput.disabled = false;
@@ -358,7 +323,7 @@
                 detailsDiv.style.display = 'none';
                 newDisplayNameInput.disabled = true;
                 saveDisplayNameBtn.disabled = true;
-                changeAvatarBtn.disabled = true;
+                uploadBtn.disabled = true;
                 newAccentColorInput.disabled = true;
                 saveAccentColorBtn.disabled = true;
                 currentSelectedUserForSettings = null;
@@ -410,10 +375,6 @@
                     } else if (itemType === 'accentColor') {
                         localStorage.setItem(`user_${currentSelectedUserForSettings}_accentColor`, value);
                         document.getElementById('currentAccentColorDisplay').style.backgroundColor = value;
-                    } else if (itemType === 'avatar') {
-                        // Assuming 'value' is the new avatar URL
-                        localStorage.setItem(`user_${currentSelectedUserForSettings}_avatarUrl`, value);
-                        document.getElementById('currentAvatar').src = value;
                     }
                 } else {
                     showSettingsPopup(data.message || "Purchase failed.", "error");

@@ -34,9 +34,16 @@
         {% set users_to_render = [display_user] if display_user else users %}
         {% for user_name in users_to_render %}
         <div class="user-column" id="column-{{ user_name.lower() }}">
-            <h2>{{ user_name }}
+            <h2>
+                {% set user_info = all_users_data[user_name] %}
+                {% if user_info.profile_picture %}
+                    <img src="{{ url_for('static', filename=user_info.profile_picture) }}" alt="{{ user_name }}'s profile picture" class="profile-pic-header">
+                {% else %}
+                    <img src="{{ url_for('static', filename='images/avatars/default_avatar.png') }}" alt="Default profile picture" class="profile-pic-header">
+                {% endif %}
+                {{ user_name }}
                 <span id="stars-{{ user_name.lower() }}">
-                    (⭐ {{ all_users_data[user_name].stars }})
+                    (⭐ {{ user_info.stars }})
                 </span>
                 {% if admin_mode %}
                 <button class="button-delete-user" data-username="{{ user_name }}" style="margin-left: 15px; background-color: #ff4d4d; color: white; border: none; padding: 3px 8px; font-size: 0.8em; border-radius: 3px; cursor: pointer;">

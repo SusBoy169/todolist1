@@ -1,4 +1,5 @@
 from flask import Flask, render_template, redirect, url_for, request, jsonify, session, flash
+from werkzeug.utils import secure_filename
 import json
 import os
 from datetime import datetime, date, timedelta, timezone # Ensure all are imported
@@ -11,6 +12,14 @@ ADMIN_PASSWORD = "admin123"
 users = ["Veer", "Vardaan", "Avni", "Drishti"]
 DATA_DIR = "data"
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
+UPLOAD_FOLDER = 'static/uploads/profile_pics'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 TAB_THEME_COLORS = {
     "Home": "#4a90e2",      # Blue
@@ -44,14 +53,14 @@ def get_all_user_data():
         with open(USERS_FILE, 'r') as f:
             data = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
-        data = {user: {"stars": 0, "star_history": []} for user in users}
+        data = {user: {"stars": 0, "star_history": [], "profile_picture": None} for user in users}
         save_all_user_data(data)
         return data
 
     updated = False
     for user_name_loop in users:
         if user_name_loop not in data:
-            data[user_name_loop] = {"stars": 0, "star_history": []}
+            data[user_name_loop] = {"stars": 0, "star_history": [], "profile_picture": None}
             updated = True
         else:
             if "stars" not in data[user_name_loop]:
@@ -59,6 +68,9 @@ def get_all_user_data():
                 updated = True
             if "star_history" not in data[user_name_loop]:
                 data[user_name_loop]["star_history"] = []
+                updated = True
+            if "profile_picture" not in data[user_name_loop]:
+                data[user_name_loop]["profile_picture"] = None
                 updated = True
     if updated:
         save_all_user_data(data)
@@ -221,9 +233,11 @@ def main_app_view():
 
     for user_name in target_users_to_load:
         tasks = get_user_tasks(user_name)
+        user_data = user_data_global.get(user_name, {})
         all_users_display_data[user_name] = {
             "tasks": tasks,
-            "stars": user_data_global.get(user_name, {}).get("stars", 0)
+            "stars": user_data.get("stars", 0),
+            "profile_picture": user_data.get("profile_picture")
         }
 
     return render_template("task_view.html",
@@ -282,7 +296,7 @@ def add_user_admin():
     # Update users.json
     all_user_data = get_all_user_data() # Ensures we have the latest data
     if new_username_formatted not in all_user_data:
-        all_user_data[new_username_formatted] = {"stars": 0, "star_history": []}
+        all_user_data[new_username_formatted] = {"stars": 0, "star_history": [], "profile_picture": None}
         save_all_user_data(all_user_data)
 
     # Create user-specific task file
@@ -591,6 +605,40 @@ def settings():
                            active_tab="Settings",
                            tab_theme_colors=TAB_THEME_COLORS,
                            current_date_str=current_date_str)
+
+@app.route('/settings/upload_profile_pic/<username>', methods=['POST'])
+def upload_profile_pic(username):
+    if username not in users:
+        flash('User not found.', 'error')
+        return redirect(url_for('settings'))
+
+    if 'avatar' not in request.files:
+        flash('No file part', 'error')
+        return redirect(url_for('settings'))
+
+    file = request.files['avatar']
+    if file.filename == '':
+        flash('No selected file', 'error')
+        return redirect(url_for('settings'))
+
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        # To avoid conflicts, let's rename the file to <username>.<extension>
+        extension = filename.rsplit('.', 1)[1].lower()
+        new_filename = f"{username.lower()}.{extension}"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
+        file.save(file_path)
+
+        # Update users.json
+        all_user_data = get_all_user_data()
+        all_user_data[username]['profile_picture'] = os.path.join('uploads/profile_pics', new_filename)
+        save_all_user_data(all_user_data)
+
+        flash('Profile picture uploaded successfully!', 'success')
+    else:
+        flash('Invalid file type. Allowed types are png, jpg, jpeg.', 'error')
+
+    return redirect(url_for('settings'))
 
 STAR_COSTS = {
     "displayName": 10,
