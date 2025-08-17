@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Settings - TaskStar</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main_style.css') }}">
+</head>
+<body>
+    <div id="password-protection-screen">
+        <div class="password-modal">
+            <h2>Enter Settings Password</h2>
+            <p id="password-error" class="error-message" style="display:none;"></p>
+            <input type="password" id="settingsPasswordInput" placeholder="Password">
+            <button id="submitSettingsPassword">Unlock Settings</button>
+        </div>
+    </div>
+
+    <div id="unlocked-settings-view" style="display: none;">
+        <div class="settings-top-nav">
+            <div class="app-logo-settings">TaskStar 🌟</div>
+            <div class="settings-nav-links">
+                <a href="{{ url_for('index') }}" class="button-style-link">🏠 Back to Home</a>
+                <button id="lockSettingsBtn" class="button-style-link lock-button">🔒 Lock Settings</button>
+            </div>
+            <div class="time-and-toggle">
+                <div id="clock-date-container-settings">
+                    <div id="date-settings">{{ current_date_str }}</div>
+                    <div id="clock-settings">IST Time</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-main-content">
+            <h1>TaskStar Settings</h1>
+
+            <div class="settings-section-card" id="admin-controls-section">
+                <h2>🔒 Admin Controls</h2>
+
+                <div class="setting-item">
+                    <label for="newSettingsPassword">Change Settings Password:</label>
+                    <input type="password" id="newSettingsPassword" placeholder="New Password">
+                    <input type="password" id="confirmSettingsPassword" placeholder="Confirm New Password">
+                    <button id="saveNewPasswordBtn">Save Password</button>
+                    <p id="passwordChangeStatus" class="status-message" style="display:none;"></p>
+                </div>
+
+                <div class="setting-item">
+                    <label>Task Management:</label>
+                    <button id="resetAllTasksBtn">Reset All Tasks</button>
+                    <button id="exportTaskHistoryBtn" disabled>Export Task History (CSV)</button>
+                </div>
+
+                <hr style="margin: 20px 0;">
+
+                <div class="setting-item">
+                    <label for="addUserNameInput">Add New User:</label>
+                    <form method="POST" action="{{ url_for('add_user_admin') }}" style="display: flex; align-items: center; gap: 10px; margin-top:5px;">
+                        <input type="text" id="addUserNameInput" name="new_username" placeholder="Enter new user's name" required style="padding: 8px; border-radius: 4px; border: 1px solid #ccc; flex-grow:1;">
+                        <button type="submit" class="button-style" style="padding: 8px 15px;">Add User</button>
+                    </form>
+                </div>
+            </div>
+
+            {# Flashed messages block removed #}
+
+            <div class="settings-section-card" id="user-profile-settings-section">
+                <h2>🧑‍💻 User Profile Settings</h2>
+
+                <div class="setting-item">
+                    <label for="profileUserSelect">Select User:</label>
+                    <select id="profileUserSelect">
+                        <option value="">-- Select User --</option>
+                        {# Options will be populated by JavaScript #}
+                    </select>
+                </div>
+
+                <div id="selectedUserProfileDetails" style="margin-top: 15px; padding: 10px; border: 1px solid #eee; border-radius: 5px; display:none;">
+                    <h4>Profile for: <span id="selectedUserNameHeader"></span></h4>
+                    <p>Current Display Name: <strong id="currentDisplayName">-</strong></p>
+                    <div style="display:flex; align-items:center; margin-bottom:10px;">
+                        Current Avatar:
+                        <img id="currentAvatar" src="{{ url_for('static', filename='images/avatars/default_avatar.png') }}" alt="Avatar" style="width:50px; height:50px; border-radius:50%; margin-left:10px; border:1px solid #ccc;">
+                    </div>
+                    <div style="display:flex; align-items:center; margin-bottom:10px;">
+                        Current Accent Color:
+                        <div id="currentAccentColorDisplay" style="width:50px; height:25px; background-color:grey; margin-left:10px; border:1px solid #ccc;"></div>
+                    </div>
+                    <p>Stars: <strong id="currentUserStars">-</strong></p>
+
+                    <hr>
+                    <p><em>Customization options (star costs will apply):</em></p>
+
+                    <div class="setting-item">
+                        <label for="newDisplayNameInput">New Display Name (Cost: 10 ⭐):</label>
+                        <input type="text" id="newDisplayNameInput" placeholder="Enter new display name" disabled>
+                        <button id="saveDisplayNameBtn" disabled>Save Name</button>
+                    </div>
+
+                    <div class="setting-item">
+                        <label>Change Avatar (Cost: 50 ⭐):</label>
+                        {# <button id="changeAvatarBtn" disabled>Choose Avatar</button> -- Replaced by avatar grid #}
+                        <div id="avatarSelectionContainer" style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; padding:10px; border: 1px solid #eee; border-radius:5px;">
+                            <!-- Avatars will be populated here by JavaScript -->
+                        </div>
+                    </div>
+
+                    <div class="setting-item">
+                        <label for="newAccentColorInput">New Dashboard Card Color (Cost: 25 ⭐):</label>
+                        <input type="color" id="newAccentColorInput" value="#d3d3d3" disabled>
+                        <button id="saveAccentColorBtn" disabled>Save Color</button>
+                    </div>
+
+                    <hr style="margin: 20px 0;">
+                    <div class="setting-item danger-zone">
+                        <label style="color: #D8000C; font-weight: bold;">Danger Zone:</label>
+                        <button id="deleteThisUserBtn" class="button-style-danger" disabled style="background-color: #ff4d4d; color:white; border-color: #ff3030;">Delete This User</button>
+                        <p id="deleteUserStatus" class="status-message" style="display:none;"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const flask_users_list = {{ users | tojson }};
+        const flask_all_user_details = {{ all_user_details | tojson }};
+
+        const STAR_COSTS = {
+            displayName: 10,
+            avatar: 50,
+            accentColor: 25
+        };
+
+        let currentSelectedUserForSettings = null;
+
+    // --- Utility for Popups ---
+    function showSettingsPopup(message, type = 'info') {
+        // Simple alert for now, can be replaced with a styled modal/toast later
+        alert(`[${type.toUpperCase()}] ${message}`);
+        // Example of a more styled approach (if a popup element exists):
+        // const popup = document.getElementById('settingsPopup');
+        // if (popup) {
+        //     popup.textContent = message;
+        //     popup.className = `popup ${type}`; // 'popup info', 'popup success', 'popup error'
+        //     popup.style.display = 'block';
+        //     setTimeout(() => popup.style.display = 'none', 3000);
+        // }
+    }
+
+
+    // IIFE for initial theme application (dark/light class on body)
+    (function() {
+        const themePreference = localStorage.getItem('themePreference');
+        if (themePreference === 'dark') {
+            document.body.classList.add('dark-mode');
+        }
+    })();
+
+    const DEFAULT_SETTINGS_PASSWORD = "4248";
+
+    function applyTheme(theme) {
+        if (theme === 'dark') {
+            document.body.classList.add('dark-mode');
+        } else {
+            document.body.classList.remove('dark-mode');
+        }
+        // This function now also handles the toggle inside the settings content
+        const darkModeToggleContent = document.getElementById('darkModeToggle');
+        if (darkModeToggleContent) {
+            darkModeToggleContent.checked = (theme === 'dark');
+        }
+    }
+
+    function updateClockForSettings() {
+        const now = new Date();
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const timeString = `${hours}:${minutes}:${seconds}`;
+        const clockElement = document.getElementById('clock-settings');
+        if (clockElement) clockElement.textContent = timeString;
+    }
+
+    function initializeClockForSettings() {
+         if (typeof updateClockForSettings === 'function') {
+            updateClockForSettings();
+            if (!window.clockIntervalId_settings) {
+                 window.clockIntervalId_settings = setInterval(updateClockForSettings, 1000);
+            }
+         }
+    }
+
+    function handleChangeSettingsPassword() {
+        const newPasswordInput = document.getElementById('newSettingsPassword');
+        const confirmPasswordInput = document.getElementById('confirmSettingsPassword');
+        const statusEl = document.getElementById('passwordChangeStatus');
+        if (!newPasswordInput || !confirmPasswordInput || !statusEl) return;
+        const newPassword = newPasswordInput.value;
+        const confirmPassword = confirmPasswordInput.value;
+
+        if (!newPassword || !confirmPassword) {
+            statusEl.textContent = "Error: Both password fields are required.";
+            statusEl.className = 'status-message error-message';
+            statusEl.style.display = 'block'; return;
+        }
+        if (newPassword !== confirmPassword) {
+            statusEl.textContent = "Error: Passwords do not match.";
+            statusEl.className = 'status-message error-message';
+            statusEl.style.display = 'block'; return;
+        }
+        if (newPassword.length < 4) {
+            statusEl.textContent = "Error: Password must be at least 4 characters long.";
+            statusEl.className = 'status-message error-message';
+            statusEl.style.display = 'block'; return;
+        }
+        localStorage.setItem('settingsAdminPassword', newPassword);
+        statusEl.textContent = "Success: Settings password updated!";
+        statusEl.className = 'status-message success-message';
+        statusEl.style.display = 'block';
+        newPasswordInput.value = ''; confirmPasswordInput.value = '';
+        setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+    }
+
+    function handleResetAllTasks() {
+        console.log("Reset All Tasks button clicked.");
+        const firstConfirmation = confirm("Are you sure you want to reset ALL tasks for ALL users? This action cannot be undone.");
+        if (firstConfirmation) {
+            const secondConfirmation = confirm("Please confirm again: This will permanently delete all tasks for Veer, Vardaan, Avni, and Drishti.");
+            if (secondConfirmation) {
+                console.log("Second confirmation for reset tasks: OK. Proceeding (simulation).");
+                const statusEl = document.getElementById('passwordChangeStatus');
+                if (statusEl) {
+                    statusEl.textContent = "Success: All tasks reset (simulation). Actual deletion will be in a future update.";
+                    statusEl.className = 'status-message success-message';
+                    statusEl.style.display = 'block';
+                    setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
+                }
+                alert("Simulated: All tasks have been reset.");
+            } else {
+                console.log("Task reset cancelled (second confirmation).");
+                const statusEl = document.getElementById('passwordChangeStatus');
+                if (statusEl) {
+                    statusEl.textContent = "Info: Task reset cancelled.";
+                    statusEl.className = 'status-message info-message';
+                    statusEl.style.display = 'block';
+                    setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+                }
+            }
+        } else {
+            console.log("Task reset cancelled (first confirmation).");
+            const statusEl = document.getElementById('passwordChangeStatus');
+            if (statusEl) {
+                statusEl.textContent = "Info: Task reset cancelled.";
+                statusEl.className = 'status-message info-message';
+                statusEl.style.display = 'block';
+                setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+            }
+        }
+    }
+
+    function initializeUserProfileSettings() {
+        const userSelect = document.getElementById('profileUserSelect');
+        const newDisplayNameInput = document.getElementById('newDisplayNameInput');
+        const saveDisplayNameBtn = document.getElementById('saveDisplayNameBtn');
+        // const changeAvatarBtn = document.getElementById('changeAvatarBtn'); // Button is removed
+        const avatarSelectionContainer = document.getElementById('avatarSelectionContainer');
+        const newAccentColorInput = document.getElementById('newAccentColorInput');
+        const saveAccentColorBtn = document.getElementById('saveAccentColorBtn');
+        const deleteThisUserBtn = document.getElementById('deleteThisUserBtn');
+        const deleteUserStatus = document.getElementById('deleteUserStatus');
+        const detailsDiv = document.getElementById('selectedUserProfileDetails');
+
+        if (!userSelect || !newDisplayNameInput || !saveDisplayNameBtn || !avatarSelectionContainer || !newAccentColorInput || !saveAccentColorBtn || !deleteThisUserBtn || !deleteUserStatus || !detailsDiv || typeof flask_users_list === 'undefined' || typeof flask_all_user_details === 'undefined') {
+            console.error("One or more user profile settings elements (including delete button/status) or initial Flask data not found.");
+            return;
+        }
+
+        const PREDEFINED_AVATARS = [
+            "{{ url_for('static', filename='images/avatars/default_avatar.png') }}", // Default
+            "https://placekitten.com/50/50", "https://placekitten.com/51/51", "https://placekitten.com/52/52",
+            "https://placekitten.com/53/53", "https://placekitten.com/54/54", "https://placekitten.com/55/55",
+            "https://picsum.photos/id/237/50/50", "https://picsum.photos/id/238/50/50", "https://picsum.photos/id/239/50/50",
+            "https://picsum.photos/id/240/50/50", "https://picsum.photos/id/241/50/50", "https://picsum.photos/id/242/50/50",
+            "https://picsum.photos/id/1005/50/50", // Example with specific ID
+            "https://picsum.photos/seed/cat/50/50", // Example with seed
+            "https://picsum.photos/seed/dog/50/50"
+        ];
+
+        function populateAvatarSelection() {
+            avatarSelectionContainer.innerHTML = ''; // Clear previous avatars
+            PREDEFINED_AVATARS.forEach(avatarUrl => {
+                const img = document.createElement('img');
+                img.src = avatarUrl;
+                img.alt = "Avatar Option";
+                img.style.width = '50px';
+                img.style.height = '50px';
+                img.style.borderRadius = '50%';
+                img.style.border = '2px solid transparent';
+                img.style.cursor = 'pointer';
+                img.addEventListener('click', function() {
+                    // Visually indicate selection (optional)
+                    // document.querySelectorAll('#avatarSelectionContainer img').forEach(i => i.style.border = '2px solid transparent');
+                    // img.style.border = '2px solid #007bff'; // Highlight selected
+
+                    // Directly process purchase on click for simplicity
+                    if (currentSelectedUserForSettings) {
+                         processPurchase('avatar', avatarUrl);
+                    } else {
+                        showSettingsPopup("Please select a user first.", "error");
+                    }
+                });
+                avatarSelectionContainer.appendChild(img);
+            });
+        }
+
+
+        // Populate user select dropdown
+        flask_users_list.forEach(username => {
+            const option = document.createElement('option');
+            option.value = username;
+            option.textContent = username;
+            userSelect.appendChild(option);
+        });
+
+        function updateProfileDetailsDisplay(username) {
+            currentSelectedUserForSettings = username;
+            if (username) {
+                const userDataFromServer = flask_all_user_details[username]; // Original data from server (for stars)
+                const userDisplayName = localStorage.getItem(`user_${username}_displayName`) || username;
+                const userAvatar = localStorage.getItem(`user_${username}_avatarUrl`) || "{{ url_for('static', filename='images/avatars/default_avatar.png') }}";
+                const userAccentColor = localStorage.getItem(`user_${username}_accentColor`) || 'grey';
+                // Fetch latest star count directly from server data or update it if purchases happen
+                // For now, flask_all_user_details is initial. We need to update this if stars change.
+                // Let's add a function to update stars locally for the display.
+                const currentStars = userDataFromServer ? userDataFromServer.stars : ( (flask_all_user_details[username] && flask_all_user_details[username].stars) ? flask_all_user_details[username].stars : 0);
+
+
+                document.getElementById('selectedUserNameHeader').textContent = userDisplayName;
+                document.getElementById('currentDisplayName').textContent = userDisplayName;
+                document.getElementById('currentAvatar').src = userAvatar;
+                document.getElementById('currentAccentColorDisplay').style.backgroundColor = userAccentColor;
+                document.getElementById('currentUserStars').textContent = currentStars;
+
+                newDisplayNameInput.value = userDisplayName;
+                newDisplayNameInput.disabled = false;
+                saveDisplayNameBtn.disabled = false;
+
+                // changeAvatarBtn.disabled = false; // Button removed, grid is always active
+                avatarSelectionContainer.style.display = 'flex'; // Ensure grid is visible
+
+                newAccentColorInput.value = userAccentColor;
+                newAccentColorInput.disabled = false;
+                saveAccentColorBtn.disabled = false;
+                deleteThisUserBtn.disabled = false;
+
+                detailsDiv.style.display = 'block';
+            } else {
+                detailsDiv.style.display = 'none';
+                newDisplayNameInput.disabled = true;
+                saveDisplayNameBtn.disabled = true;
+                changeAvatarBtn.disabled = true;
+                newAccentColorInput.disabled = true;
+                saveAccentColorBtn.disabled = true;
+                currentSelectedUserForSettings = null;
+            }
+        }
+
+        function updateUserStarsDisplay(username, newStarCount) {
+            if (flask_all_user_details[username]) {
+                flask_all_user_details[username].stars = newStarCount; // Update local cache of star data
+            }
+            document.getElementById('currentUserStars').textContent = newStarCount;
+             // Also update the main dashboard data if it's being displayed or used elsewhere dynamically (complex)
+            // For now, this updates the settings page view.
+        }
+
+
+        userSelect.addEventListener('change', function() {
+            updateProfileDetailsDisplay(this.value);
+        });
+
+        async function processPurchase(itemType, value) {
+            if (!currentSelectedUserForSettings) {
+                showSettingsPopup("No user selected.", "error");
+                return;
+            }
+            const cost = STAR_COSTS[itemType];
+            const confirmationMessage = `This will cost ${cost} stars. Proceed?`;
+            if (!confirm(confirmationMessage)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/settings/purchase/${currentSelectedUserForSettings}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item_type: itemType, value: value })
+                });
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    showSettingsPopup(data.message || "Purchase successful!", "success");
+                    updateUserStarsDisplay(currentSelectedUserForSettings, data.newStars);
+
+                    // Update localStorage and UI based on itemType
+                    if (itemType === 'displayName') {
+                        localStorage.setItem(`user_${currentSelectedUserForSettings}_displayName`, value);
+                        document.getElementById('currentDisplayName').textContent = value;
+                        document.getElementById('selectedUserNameHeader').textContent = value; // Update header too
+                    } else if (itemType === 'accentColor') {
+                        localStorage.setItem(`user_${currentSelectedUserForSettings}_accentColor`, value);
+                        document.getElementById('currentAccentColorDisplay').style.backgroundColor = value;
+                    } else if (itemType === 'avatar') {
+                        // Assuming 'value' is the new avatar URL
+                        localStorage.setItem(`user_${currentSelectedUserForSettings}_avatarUrl`, value);
+                        document.getElementById('currentAvatar').src = value;
+                    }
+                } else {
+                    showSettingsPopup(data.message || "Purchase failed.", "error");
+                    if(data.currentStars !== undefined) { // If server sends back current stars on fail
+                        updateUserStarsDisplay(currentSelectedUserForSettings, data.currentStars);
+                    }
+                }
+            } catch (error) {
+                console.error("Purchase fetch error:", error);
+                showSettingsPopup("An error occurred while making the purchase.", "error");
+            }
+        }
+
+        saveDisplayNameBtn.addEventListener('click', function() {
+            const newName = newDisplayNameInput.value.trim();
+            if (newName && newName.length >= 3) {
+                processPurchase('displayName', newName);
+            } else {
+                showSettingsPopup("Display name must be at least 3 characters.", "error");
+            }
+        });
+
+        saveAccentColorBtn.addEventListener('click', function() {
+            const newColor = newAccentColorInput.value;
+            processPurchase('accentColor', newColor);
+        });
+
+        // The old changeAvatarBtn event listener is removed as the button is gone.
+        // Clicking on an avatar in the grid now triggers processPurchase.
+
+        deleteThisUserBtn.addEventListener('click', async function() {
+            if (!currentSelectedUserForSettings) {
+                showSettingsPopup("No user selected for deletion.", "error");
+                return;
+            }
+            const usernameToDelete = currentSelectedUserForSettings; // For clarity in this function scope
+
+            const confirmation = confirm(`ARE YOU ABSOLUTELY SURE you want to permanently delete user '${usernameToDelete}' and all their tasks and data? This action cannot be undone.`);
+            if (!confirmation) return;
+
+            const secondConfirmation = confirm(`Final confirmation: Deleting '${usernameToDelete}' is irreversible. Proceed?`);
+            if (!secondConfirmation) return;
+
+            deleteUserStatus.textContent = `Attempting to delete ${usernameToDelete}...`;
+            deleteUserStatus.className = 'status-message info-message';
+            deleteUserStatus.style.display = 'block';
+
+            try {
+                const response = await fetch(`/admin/delete_user/${usernameToDelete}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' } // Backend expects POST, no specific body needed for this action
+                });
+
+                // The backend redirects on success/failure and flashes messages.
+                // So, the ideal scenario is that the page reloads due to redirect.
+                // We'll try to parse JSON if it's an error response that didn't redirect.
+                if (response.redirected || response.ok) { // OK might mean it sent JSON before redirect, or just 200
+                    deleteUserStatus.textContent = `User '${usernameToDelete}' deletion process initiated. Page will refresh.`;
+                    deleteUserStatus.className = 'status-message success-message';
+                    // Give a moment for the message to be seen before potential redirect from server takes over or we force it
+                    setTimeout(() => {
+                        window.location.reload(); // Reload settings to reflect user list change
+                    }, 1500);
+                } else {
+                    let errorMsg = `Failed to delete user '${usernameToDelete}'. Status: ${response.status}.`;
+                    try {
+                        const data = await response.json();
+                        errorMsg = data.message || errorMsg;
+                    } catch (e) { /* ignore if no JSON body */ }
+                    deleteUserStatus.textContent = errorMsg;
+                    deleteUserStatus.className = 'status-message error-message';
+                    showSettingsPopup(errorMsg, "error");
+                }
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                deleteUserStatus.textContent = `Client-side error deleting user: ${error.message}`;
+                deleteUserStatus.className = 'status-message error-message';
+                showSettingsPopup(`An error occurred: ${error.message}`, "error");
+            }
+            setTimeout(() => { deleteUserStatus.style.display = 'none'; }, 5000); // Hide status after a while
+        });
+
+        populateAvatarSelection(); // Populate the avatar grid when settings page initializes
+        console.log("User Profile Settings initialized with purchase and delete functionality and avatar grid.");
+    }
+
+    function handleLockSettings() {
+        console.log('[LockSettings] Lock Settings button clicked.');
+        try {
+            sessionStorage.removeItem('settingsUnlocked');
+            console.log('[LockSettings] sessionStorage.settingsUnlocked flag removed.');
+        } catch (e) {
+            console.error('[LockSettings] Error removing item from sessionStorage:', e);
+            alert('Could not properly lock settings due to a storage issue. Please try clearing your browser cache or report this.');
+            return;
+        }
+        console.log('[LockSettings] Redirecting to home page...');
+        window.location.href = "{{ url_for('index') }}";
+    }
+
+    function initializeUnlockedSettingsFeatures() {
+        console.log("Initializing unlocked settings features...");
+        const currentThemeStored = localStorage.getItem('themePreference') || 'light';
+        applyTheme(currentThemeStored);
+
+        initializeClockForSettings();
+
+        const savePassBtn = document.getElementById('saveNewPasswordBtn');
+        if (savePassBtn) { savePassBtn.addEventListener('click', handleChangeSettingsPassword); }
+
+        const resetTasksBtn = document.getElementById('resetAllTasksBtn');
+        if (resetTasksBtn) { resetTasksBtn.addEventListener('click', handleResetAllTasks); }
+
+        const darkModeToggleContent = document.getElementById('darkModeToggle');
+        if (darkModeToggleContent) {
+            darkModeToggleContent.checked = (currentThemeStored === 'dark');
+            darkModeToggleContent.addEventListener('change', function() {
+                const newTheme = this.checked ? 'dark' : 'light';
+                localStorage.setItem('themePreference', newTheme);
+                applyTheme(newTheme);
+            });
+        }
+        if (typeof initializeUserProfileSettings === 'function') { initializeUserProfileSettings(); }
+
+        const lockSettingsButton = document.getElementById('lockSettingsBtn');
+        if (lockSettingsButton) {
+            lockSettingsButton.addEventListener('click', handleLockSettings);
+            console.log("[SettingsInit] Event listener attached to Lock Settings button.");
+        } else {
+            console.error("[SettingsInit] CRITICAL: Lock Settings button #lockSettingsBtn not found!");
+        }
+        console.log("[SettingsInit] Full page features initialization complete (including lock button).");
+    }
+
+    function checkSettingsPassword() {
+        const enteredPasswordInput = document.getElementById('settingsPasswordInput');
+        const enteredPassword = enteredPasswordInput.value;
+        const storedPassword = localStorage.getItem('settingsAdminPassword') || DEFAULT_SETTINGS_PASSWORD;
+        const errorEl = document.getElementById('password-error');
+
+        if (enteredPassword === storedPassword) {
+            document.getElementById('password-protection-screen').style.display = 'none';
+            document.getElementById('unlocked-settings-view').style.display = 'block';
+            sessionStorage.setItem('settingsUnlocked', 'true');
+            initializeUnlockedSettingsFeatures();
+            enteredPasswordInput.value = '';
+            if(errorEl) errorEl.style.display = 'none';
+        } else {
+            if(errorEl) {
+                errorEl.textContent = "Incorrect password. Please try again.";
+                errorEl.style.display = 'block';
+            }
+            enteredPasswordInput.value = '';
+            enteredPasswordInput.focus();
+        }
+    }
+
+    const submitPassButton = document.getElementById('submitSettingsPassword');
+    if (submitPassButton) { submitPassButton.addEventListener('click', checkSettingsPassword); }
+    const passwordInput = document.getElementById('settingsPasswordInput');
+    if (passwordInput) {
+        passwordInput.addEventListener('keypress', function(event) {
+            if (event.key === "Enter") { checkSettingsPassword(); }
+        });
+        if (document.getElementById('password-protection-screen').style.display !== 'none') {
+             passwordInput.focus();
+        }
+    }
+    if (sessionStorage.getItem('settingsUnlocked') === 'true') {
+        document.getElementById('password-protection-screen').style.display = 'none';
+        document.getElementById('unlocked-settings-view').style.display = 'block';
+        initializeUnlockedSettingsFeatures();
+    }
+    </script>
+</body>
+</html>
